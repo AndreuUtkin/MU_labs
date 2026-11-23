@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1045 &1
+EditorBuildSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Scenes:
+  - enabled: 1
+    path: Assets/Labs/Scenes/Lab1_Setup.unity
+    guid: 7f091c5680bbf185cbebe9ebb38883f8
+  - enabled: 1
+    path: Assets/Labs/Scenes/Lab2_Locomotion.unity
+    guid: 9809d3004a39ea86a876064dcd0065c2
+  - enabled: 1
+    path: Assets/Labs/Scenes/Lab3_Interaction.unity
+    guid: 6eb24fbf0c21b64f59e9dab8e3637b37
+  - enabled: 1
+    path: Assets/Labs/Scenes/Lab5_Scripting.unity
+    guid: b8053439ff12ccc25bcb0e85ce67f49c
+  - enabled: 1
+    path: Assets/Labs/Scenes/Lab6_Trainer.unity
+    guid: bf538ac7b98e694f7becfe84e5297780
+  m_configObjects:
+    com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 5dd08b1b1fb495e1b98fcbd101e24072, type: 2}
+    com.unity.xr.openxr.settings4: {fileID: 11400000, guid: 9e3ddb171f4dc3f47977ecb42b67f698, type: 2}
