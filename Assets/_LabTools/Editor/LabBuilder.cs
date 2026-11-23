@@ -223,6 +223,8 @@ public static class LabBuilder
         if (origin != null)
             origin.transform.position = new Vector3(0f, 0f, 0f);
 
+        AddStationProps(new Vector3(-2.2f, 0f, -2.2f), true);
+
         return SaveScene(scene, "Lab1_Setup.unity");
     }
 
@@ -245,6 +247,8 @@ public static class LabBuilder
         var message = CreateWorldCanvas("Info_Message", new Vector3(0f, 1.6f, 2.4f), "Нажата кнопка!\nИнформационное сообщение", 1.2f, new Color(0.1f, 0.1f, 0.15f, 0.9f));
         message.SetActive(false);
         CreatePushButton("Info_Button", new Vector3(0f, 1.0f, 2.0f), new Color(0.9f, 0.5f, 0.1f), message, null);
+
+        AddStationProps(new Vector3(-4.4f, 0f, -4.4f), false);
 
         return SaveScene(scene, "Lab2_Locomotion.unity");
     }
@@ -270,6 +274,8 @@ public static class LabBuilder
         spawn.maxObjects = 8;
 
         CreateHingeDoor(new Vector3(1.8f, 1.0f, 1.5f));
+
+        AddStationProps(new Vector3(-4.4f, 0f, -4.4f), false);
 
         return SaveScene(scene, "Lab3_Interaction.unity");
     }
@@ -338,6 +344,8 @@ public static class LabBuilder
             snd.source = audioSource;
         }
 
+        AddStationProps(new Vector3(-4.4f, 0f, -4.4f), false);
+
         return SaveScene(scene, "Lab4_UI.unity");
     }
 
@@ -400,6 +408,8 @@ public static class LabBuilder
             snd.source = audioSource;
         }
 
+        AddStationProps(new Vector3(-4.4f, 0f, -4.4f), false);
+
         return SaveScene(scene, "Lab4_Menu.unity");
     }
 
@@ -424,6 +434,8 @@ public static class LabBuilder
 
         var hoverCube = CreateSimpleInteractableObject("Script_HoverScale", new Vector3(1.4f, 1.0f, 1.5f), new Color(0.7f, 0.3f, 0.8f));
         hoverCube.AddComponent<HoverScale>();
+
+        AddStationProps(new Vector3(-4.4f, 0f, -4.4f), false);
 
         return SaveScene(scene, "Lab5_Scripting.unity");
     }
@@ -469,6 +481,8 @@ public static class LabBuilder
         var trigger = zone.AddComponent<TriggerZone>();
         trigger.indicator = zoneLight.GetComponent<IndicatorLight>();
         trigger.visual = zoneRenderer;
+
+        AddStationProps(new Vector3(-4.4f, 0f, -4.4f), false);
 
         return SaveScene(scene, "Lab6_Trainer.unity");
     }
@@ -543,6 +557,53 @@ public static class LabBuilder
         go.GetComponent<Renderer>().sharedMaterial = GetMaterial("Indicator", new Color(0.25f, 0.05f, 0.05f));
         go.AddComponent<IndicatorLight>();
         return go;
+    }
+
+    // ---------------------------------------------------------------------
+    // Nuclear power plant flavoured props (added to every scene, kept modest)
+    // ---------------------------------------------------------------------
+
+    static GameObject CreateCylinder(string name, Transform parent, Vector3 position, Vector3 scale, Color color, Vector3 euler)
+    {
+        var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        go.name = name;
+        if (parent != null)
+            go.transform.SetParent(parent, true);
+        go.transform.position = position;
+        go.transform.localScale = scale;
+        go.transform.rotation = Quaternion.Euler(euler);
+        go.GetComponent<Renderer>().sharedMaterial = GetMaterial("Mat_" + ColorKey(color), color);
+        return go;
+    }
+
+    // A small, consistent "station equipment" cluster placed in a corner of the
+    // scene: a cabinet with a status lamp and a hazard sign, two vertical pipes,
+    // a red valve, and (in rooms with walls) a pair of pipes along the far wall.
+    static void AddStationProps(Vector3 corner, bool wallPipes)
+    {
+        var root = new GameObject("Station_Props");
+        var cx = corner.x;
+        var cz = corner.z;
+
+        var steel = new Color(153f / 255f, 153f / 255f, 153f / 255f);
+        var dark = new Color(51f / 255f, 56f / 255f, 64f / 255f);
+        var yellow = new Color(217f / 255f, 191f / 255f, 51f / 255f);
+        var green = new Color(76f / 255f, 204f / 255f, 76f / 255f);
+        var red = new Color(204f / 255f, 51f / 255f, 51f / 255f);
+
+        CreateBox("Station_Cabinet", root.transform, new Vector3(cx, 0.8f, cz), new Vector3(0.9f, 1.6f, 0.42f), dark);
+        CreateBox("Station_Cabinet_Lamp", root.transform, new Vector3(cx + 0.30f, 1.35f, cz + 0.235f), new Vector3(0.12f, 0.12f, 0.05f), green);
+        CreateCylinder("Station_Pipe_A", root.transform, new Vector3(cx - 0.62f, 1.15f, cz), new Vector3(0.09f, 1.15f, 0.09f), steel, Vector3.zero);
+        CreateCylinder("Station_Pipe_B", root.transform, new Vector3(cx - 0.42f, 1.15f, cz), new Vector3(0.09f, 1.15f, 0.09f), steel, Vector3.zero);
+        CreateBox("Station_Warning_Sign", root.transform, new Vector3(cx - 0.15f, 1.45f, cz + 0.235f), new Vector3(0.34f, 0.34f, 0.04f), yellow);
+        CreateBox("Station_Sign_Hub", root.transform, new Vector3(cx - 0.15f, 1.45f, cz + 0.262f), new Vector3(0.10f, 0.10f, 0.03f), dark);
+        CreateCylinder("Station_Valve", root.transform, new Vector3(cx - 0.62f, 1.55f, cz + 0.16f), new Vector3(0.14f, 0.05f, 0.14f), red, Vector3.zero);
+
+        if (wallPipes)
+        {
+            CreateCylinder("Station_Wall_Pipe_A", root.transform, new Vector3(0f, 2.35f, cz - 0.55f), new Vector3(0.07f, 2.4f, 0.07f), steel, new Vector3(0f, 0f, 90f));
+            CreateCylinder("Station_Wall_Pipe_B", root.transform, new Vector3(0f, 2.62f, cz - 0.50f), new Vector3(0.07f, 2.4f, 0.07f), steel, new Vector3(0f, 0f, 90f));
+        }
     }
 
     static void CreateHingeDoor(Vector3 position)
