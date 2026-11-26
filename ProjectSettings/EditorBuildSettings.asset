@@ -15,6 +15,12 @@ EditorBuildSettings:
     path: Assets/Labs/Scenes/Lab3_Interaction.unity
     guid: 6eb24fbf0c21b64f59e9dab8e3637b37
   - enabled: 1
+    path: Assets/Labs/Scenes/Lab4_UI.unity
+    guid: 39cc1102130e48189831f6f40022ab1b
+  - enabled: 1
+    path: Assets/Labs/Scenes/Lab4_Menu.unity
+    guid: 3672dfba095c2d796a3ce66ff0c7d0fb
+  - enabled: 1
     path: Assets/Labs/Scenes/Lab5_Scripting.unity
     guid: b8053439ff12ccc25bcb0e85ce67f49c
   - enabled: 1

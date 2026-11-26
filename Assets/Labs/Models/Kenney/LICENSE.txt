@@ -1,0 +1,15 @@
+Kenney 3D assets — included in this project
+============================================
+
+The 3D models under Assets/Labs/Models/Kenney/ are taken from Kenney's
+free asset packs and are licensed under CC0 1.0 Universal (public domain):
+
+  Furniture Kit, Nature Kit, Toy Car Kit, Food Kit
+  Author: Kenney (https://kenney.nl)
+
+License: CC0 1.0 Universal
+https://creativecommons.org/publicdomain/zero/1.0/
+
+You may use these assets in personal and commercial projects, modify them,
+and redistribute them without attribution. Attribution is appreciated but
+not required.

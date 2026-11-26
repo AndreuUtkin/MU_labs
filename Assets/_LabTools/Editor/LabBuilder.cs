@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -93,7 +94,7 @@ public static class LabBuilder
     // Shared scene scaffolding
     // ---------------------------------------------------------------------
 
-    static Scene CreateBaseScene(string sceneName, bool addFloor = true, bool addSimulator = true)
+    static Scene CreateBaseScene(string sceneName, bool addFloor = false, bool addSimulator = true)
     {
         var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         scene.name = sceneName;
@@ -188,18 +189,7 @@ public static class LabBuilder
     {
         var scene = CreateBaseScene("Lab1", addFloor: false);
 
-        var room = new GameObject("Room");
-        var wallColor = new Color(0.85f, 0.83f, 0.78f);
-        CreateBox("Room/Floor", room.transform, new Vector3(0f, -0.05f, 0f), new Vector3(6f, 0.1f, 6f), wallColor);
-        CreateBox("Room/Ceiling", room.transform, new Vector3(0f, 3f, 0f), new Vector3(6f, 0.1f, 6f), new Color(0.9f, 0.9f, 0.92f));
-        CreateBox("Room/Wall_North", room.transform, new Vector3(0f, 1.5f, 3f), new Vector3(6f, 3f, 0.1f), wallColor);
-        CreateBox("Room/Wall_South", room.transform, new Vector3(0f, 1.5f, -3f), new Vector3(6f, 3f, 0.1f), wallColor);
-        CreateBox("Room/Wall_East", room.transform, new Vector3(3f, 1.5f, 0f), new Vector3(0.1f, 3f, 6f), wallColor);
-        CreateBox("Room/Wall_West", room.transform, new Vector3(-3f, 1.5f, 0f), new Vector3(0.1f, 3f, 6f), wallColor);
-
-        var floor = GameObject.Find("Room/Floor");
-        if (floor != null)
-            floor.AddComponent<TeleportationArea>();
+        BuildInterior(1);
 
         // Modeled in Blender and exported to FBX, then imported here.
         var modelPath = ModelsDir + "/BlenderTable.fbx";
@@ -222,8 +212,6 @@ public static class LabBuilder
         var origin = GameObject.Find("XR Origin (XR Rig)");
         if (origin != null)
             origin.transform.position = new Vector3(0f, 0f, 0f);
-
-        AddStationProps(new Vector3(-2.2f, 0f, -2.2f), true);
 
         return SaveScene(scene, "Lab1_Setup.unity");
     }
@@ -248,7 +236,7 @@ public static class LabBuilder
         message.SetActive(false);
         CreatePushButton("Info_Button", new Vector3(0f, 1.0f, 2.0f), new Color(0.9f, 0.5f, 0.1f), message, null);
 
-        AddStationProps(new Vector3(-4.4f, 0f, -4.4f), false);
+        BuildInterior(2);
 
         return SaveScene(scene, "Lab2_Locomotion.unity");
     }
@@ -275,7 +263,7 @@ public static class LabBuilder
 
         CreateHingeDoor(new Vector3(1.8f, 1.0f, 1.5f));
 
-        AddStationProps(new Vector3(-4.4f, 0f, -4.4f), false);
+        BuildInterior(3);
 
         return SaveScene(scene, "Lab3_Interaction.unity");
     }
@@ -344,7 +332,7 @@ public static class LabBuilder
             snd.source = audioSource;
         }
 
-        AddStationProps(new Vector3(-4.4f, 0f, -4.4f), false);
+        BuildInterior(4);
 
         return SaveScene(scene, "Lab4_UI.unity");
     }
@@ -408,7 +396,7 @@ public static class LabBuilder
             snd.source = audioSource;
         }
 
-        AddStationProps(new Vector3(-4.4f, 0f, -4.4f), false);
+        BuildInterior(4);
 
         return SaveScene(scene, "Lab4_Menu.unity");
     }
@@ -435,7 +423,7 @@ public static class LabBuilder
         var hoverCube = CreateSimpleInteractableObject("Script_HoverScale", new Vector3(1.4f, 1.0f, 1.5f), new Color(0.7f, 0.3f, 0.8f));
         hoverCube.AddComponent<HoverScale>();
 
-        AddStationProps(new Vector3(-4.4f, 0f, -4.4f), false);
+        BuildInterior(5);
 
         return SaveScene(scene, "Lab5_Scripting.unity");
     }
@@ -482,7 +470,7 @@ public static class LabBuilder
         trigger.indicator = zoneLight.GetComponent<IndicatorLight>();
         trigger.visual = zoneRenderer;
 
-        AddStationProps(new Vector3(-4.4f, 0f, -4.4f), false);
+        BuildInterior(6);
 
         return SaveScene(scene, "Lab6_Trainer.unity");
     }
@@ -576,33 +564,228 @@ public static class LabBuilder
         return go;
     }
 
-    // A small, consistent "station equipment" cluster placed in a corner of the
-    // scene: a cabinet with a status lamp and a hazard sign, two vertical pipes,
-    // a red valve, and (in rooms with walls) a pair of pipes along the far wall.
-    static void AddStationProps(Vector3 corner, bool wallPipes)
+    // =====================================================================
+    // Kindergarten interior: Kenney models + modular rooms
+    // =====================================================================
+
+    const string KenneyRoot = "Assets/Labs/Models/Kenney";
+    const float S_Furn = 0.20f;   // Furniture Kit -> metres (wall tile = 2 m)
+    const float S_Nature = 1.0f;  // Nature Kit is already ~metres
+    const float S_Toy = 1.0f;     // Toy / Food kits are already ~metres
+
+    static Material s_Atlas;
+
+    static Material AtlasMaterial()
     {
-        var root = new GameObject("Station_Props");
-        var cx = corner.x;
-        var cz = corner.z;
-
-        var steel = new Color(153f / 255f, 153f / 255f, 153f / 255f);
-        var dark = new Color(51f / 255f, 56f / 255f, 64f / 255f);
-        var yellow = new Color(217f / 255f, 191f / 255f, 51f / 255f);
-        var green = new Color(76f / 255f, 204f / 255f, 76f / 255f);
-        var red = new Color(204f / 255f, 51f / 255f, 51f / 255f);
-
-        CreateBox("Station_Cabinet", root.transform, new Vector3(cx, 0.8f, cz), new Vector3(0.9f, 1.6f, 0.42f), dark);
-        CreateBox("Station_Cabinet_Lamp", root.transform, new Vector3(cx + 0.30f, 1.35f, cz + 0.235f), new Vector3(0.12f, 0.12f, 0.05f), green);
-        CreateCylinder("Station_Pipe_A", root.transform, new Vector3(cx - 0.62f, 1.15f, cz), new Vector3(0.09f, 1.15f, 0.09f), steel, Vector3.zero);
-        CreateCylinder("Station_Pipe_B", root.transform, new Vector3(cx - 0.42f, 1.15f, cz), new Vector3(0.09f, 1.15f, 0.09f), steel, Vector3.zero);
-        CreateBox("Station_Warning_Sign", root.transform, new Vector3(cx - 0.15f, 1.45f, cz + 0.235f), new Vector3(0.34f, 0.34f, 0.04f), yellow);
-        CreateBox("Station_Sign_Hub", root.transform, new Vector3(cx - 0.15f, 1.45f, cz + 0.262f), new Vector3(0.10f, 0.10f, 0.03f), dark);
-        CreateCylinder("Station_Valve", root.transform, new Vector3(cx - 0.62f, 1.55f, cz + 0.16f), new Vector3(0.14f, 0.05f, 0.14f), red, Vector3.zero);
-
-        if (wallPipes)
+        if (s_Atlas != null)
+            return s_Atlas;
+        var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(KenneyRoot + "/Toys/Textures/colormap.png");
+        var path = MaterialsDir + "/KenneyColormap.mat";
+        var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (mat == null)
         {
-            CreateCylinder("Station_Wall_Pipe_A", root.transform, new Vector3(0f, 2.35f, cz - 0.55f), new Vector3(0.07f, 2.4f, 0.07f), steel, new Vector3(0f, 0f, 90f));
-            CreateCylinder("Station_Wall_Pipe_B", root.transform, new Vector3(0f, 2.62f, cz - 0.50f), new Vector3(0.07f, 2.4f, 0.07f), steel, new Vector3(0f, 0f, 90f));
+            var shader = Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Sprites/Default");
+            mat = new Material(shader);
+            if (tex != null)
+                mat.mainTexture = tex;
+            AssetDatabase.CreateAsset(mat, path);
+        }
+        s_Atlas = mat;
+        return mat;
+    }
+
+    // Instantiates a Kenney model, scales it and puts its base + footprint
+    // centre at "pos".
+    static GameObject PlaceModel(string relPath, Vector3 pos, float rotY = 0f, float scale = 1f, Transform parent = null, bool atlas = false)
+    {
+        var path = KenneyRoot + "/" + relPath + ".fbx";
+        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+        if (prefab == null)
+        {
+            Debug.LogWarning("[LabBuilder] Missing model: " + path);
+            return null;
+        }
+
+        var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+        go.name = Path.GetFileNameWithoutExtension(relPath);
+        if (parent != null)
+            go.transform.SetParent(parent, true);
+        go.transform.localScale = Vector3.one * scale;
+        go.transform.rotation = Quaternion.Euler(0f, rotY, 0f);
+        go.transform.position = Vector3.zero;
+
+        var rs = go.GetComponentsInChildren<Renderer>();
+        if (rs.Length > 0)
+        {
+            var b = rs[0].bounds;
+            for (var i = 1; i < rs.Length; i++)
+                b.Encapsulate(rs[i].bounds);
+            go.transform.position = new Vector3(pos.x - b.center.x, pos.y - b.min.y, pos.z - b.center.z);
+        }
+        else
+        {
+            go.transform.position = pos;
+        }
+
+        if (atlas)
+        {
+            var m = AtlasMaterial();
+            foreach (var r in go.GetComponentsInChildren<Renderer>())
+                r.sharedMaterial = m;
+        }
+        return go;
+    }
+
+    static void AddPointLight(Transform parent, Vector3 pos, Color color, float range, float intensity)
+    {
+        var go = new GameObject("Light");
+        go.transform.SetParent(parent, true);
+        go.transform.position = pos;
+        var l = go.AddComponent<Light>();
+        l.type = LightType.Point;
+        l.color = color;
+        l.range = range;
+        l.intensity = intensity;
+    }
+
+    // A room shell: Kenney wall tiles (with an optional window/doorway), a wood
+    // floor with a teleportation area, and a flat ceiling.
+    static GameObject BuildRoom(float w, float d, float h, Color wallColor, Color floorColor, Color ceilColor, bool window, bool doorway)
+    {
+        var root = new GameObject("Room");
+
+        var floor = CreateBox("Floor", root.transform, new Vector3(0f, -0.05f, 0f), new Vector3(w, 0.1f, d), floorColor);
+        floor.AddComponent<TeleportationArea>();
+        CreateBox("Ceiling", root.transform, new Vector3(0f, h + 0.05f, 0f), new Vector3(w, 0.1f, d), ceilColor);
+
+        var tw = 10f * S_Furn; // wall tile width ≈ 2 m
+        int nx = Mathf.Max(1, Mathf.RoundToInt(w / tw));
+        int nz = Mathf.Max(1, Mathf.RoundToInt(d / tw));
+        var sx = w / nx;
+        var sz = d / nz;
+
+        for (var i = 0; i < nx; i++)
+        {
+            var x = -w / 2f + sx * (i + 0.5f);
+            var north = (window && i == nx - 1) ? "Furniture/wallWindow" : "Furniture/wall";
+            var south = (doorway && i == 0) ? "Furniture/wallDoorway" : "Furniture/wall";
+            PlaceModel(north, new Vector3(x, 0f, d / 2f), 0f, S_Furn, root.transform);
+            PlaceModel(south, new Vector3(x, 0f, -d / 2f), 0f, S_Furn, root.transform);
+        }
+        for (var j = 0; j < nz; j++)
+        {
+            var z = -d / 2f + sz * (j + 0.5f);
+            PlaceModel("Furniture/wall", new Vector3(w / 2f, 0f, z), 90f, S_Furn, root.transform);
+            PlaceModel("Furniture/wall", new Vector3(-w / 2f, 0f, z), 90f, S_Furn, root.transform);
+        }
+
+        // ceiling lamp + warm light
+        PlaceModel("Furniture/lampSquareCeiling", new Vector3(0f, h, 0f), 0f, S_Furn, root.transform);
+        AddPointLight(root.transform, new Vector3(0f, h - 0.3f, 0f), new Color(1f, 0.95f, 0.85f), 12f, 1.6f);
+
+        return root;
+    }
+
+    static void ChairRing(Transform parent, Vector3 center, float radius, int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            var a = 360f / count * i + 20f;
+            var rad = a * Mathf.Deg2Rad;
+            var p = center + new Vector3(Mathf.Sin(rad) * radius, 0f, Mathf.Cos(rad) * radius);
+            PlaceModel("Furniture/chair", p, a + 180f, S_Furn, parent);
+        }
+    }
+
+    static void BuildInterior(int lab)
+    {
+        var wall1 = new Color(0.80f, 0.90f, 0.85f);
+        var wall2 = new Color(0.96f, 0.87f, 0.78f);
+        var wall3 = new Color(0.82f, 0.89f, 0.95f);
+        var floor = new Color(0.72f, 0.55f, 0.36f);
+        var ceil = new Color(0.95f, 0.95f, 0.97f);
+
+        switch (lab)
+        {
+            case 1:
+            {
+                var room = BuildRoom(6f, 6f, 2.58f, wall1, floor, ceil, window: true, doorway: false);
+                PlaceModel("Furniture/rugRound", new Vector3(0f, 0.02f, 0f), 0f, S_Furn, room.transform);
+                PlaceModel("Furniture/table", new Vector3(-1.4f, 0f, -1.4f), 0f, S_Furn, room.transform);
+                ChairRing(room.transform, new Vector3(-1.4f, 0f, -1.4f), 1.15f, 4);
+                PlaceModel("Furniture/bookcaseOpen", new Vector3(2.55f, 0f, -2.2f), -90f, S_Furn, room.transform);
+                PlaceModel("Furniture/pottedPlant", new Vector3(-2.5f, 0f, 2.3f), 0f, S_Furn, room.transform);
+                PlaceModel("Furniture/plantSmall1", new Vector3(2.5f, 0f, 2.3f), 0f, S_Furn, room.transform);
+                PlaceModel("Furniture/bear", new Vector3(1.3f, 0f, 1.2f), -140f, S_Furn, room.transform);
+                PlaceModel("Furniture/books", new Vector3(2.4f, 0.9f, -2.2f), 0f, S_Furn, room.transform);
+                break;
+            }
+            case 2:
+            {
+                var room = BuildRoom(6f, 8f, 2.58f, wall3, floor, ceil, window: true, doorway: true);
+                for (var i = 0; i < 4; i++)
+                    PlaceModel("Furniture/bookcaseClosedDoors", new Vector3(-2.5f, 0f, -2.4f + i * 1.6f), 90f, S_Furn, room.transform);
+                PlaceModel("Furniture/coatRackStanding", new Vector3(2.4f, 0f, -3.0f), 0f, S_Furn, room.transform);
+                PlaceModel("Furniture/bench", new Vector3(2.5f, 0f, 1.0f), -90f, S_Furn, room.transform);
+                PlaceModel("Furniture/pottedPlant", new Vector3(2.4f, 0f, 3.4f), 0f, S_Furn, room.transform);
+                PlaceModel("Furniture/rugDoormat", new Vector3(0f, 0.02f, -3.2f), 0f, S_Furn, room.transform);
+                break;
+            }
+            case 3:
+            {
+                var room = BuildRoom(6f, 6f, 2.58f, wall2, floor, ceil, window: true, doorway: true);
+                PlaceModel("Furniture/rugRounded", new Vector3(0f, 0.02f, 0.6f), 0f, S_Furn, room.transform);
+                PlaceModel("Furniture/bookcaseOpenLow", new Vector3(2.5f, 0f, 2.0f), -90f, S_Furn, room.transform);
+                PlaceModel("Furniture/bear", new Vector3(-1.6f, 0f, -1.6f), 40f, S_Furn, room.transform);
+                PlaceModel("Furniture/cardboardBoxOpen", new Vector3(-2.4f, 0f, 2.2f), 0f, S_Furn, room.transform);
+                PlaceModel("Furniture/books", new Vector3(2.35f, 0.9f, 2.0f), 0f, S_Furn, room.transform);
+                PlaceModel("Furniture/plantSmall2", new Vector3(2.5f, 0f, -2.3f), 0f, S_Furn, room.transform);
+                break;
+            }
+            case 4:
+            {
+                var room = BuildRoom(6f, 6f, 2.58f, wall1, floor, ceil, window: true, doorway: true);
+                PlaceModel("Furniture/desk", new Vector3(2.4f, 0f, -2.2f), -90f, S_Furn, room.transform);
+                PlaceModel("Furniture/chair", new Vector3(1.2f, 0f, -2.2f), 90f, S_Furn, room.transform);
+                PlaceModel("Furniture/tableCloth", new Vector3(-1.6f, 0f, 1.6f), 0f, S_Furn, room.transform);
+                ChairRing(room.transform, new Vector3(-1.6f, 0f, 1.6f), 1.15f, 4);
+                PlaceModel("Furniture/bookcaseClosed", new Vector3(-2.5f, 0f, -2.2f), 90f, S_Furn, room.transform);
+                PlaceModel("Furniture/pottedPlant", new Vector3(2.5f, 0f, 2.3f), 0f, S_Furn, room.transform);
+                PlaceModel("Furniture/computerScreen", new Vector3(2.4f, 0.5f, -2.2f), -90f, S_Furn, room.transform);
+                break;
+            }
+            case 5:
+            {
+                var room = BuildRoom(6f, 6f, 2.58f, wall3, floor, ceil, window: true, doorway: false);
+                PlaceModel("Furniture/rugRectangle", new Vector3(0f, 0.02f, 0.4f), 0f, S_Furn, room.transform);
+                PlaceModel("Furniture/desk", new Vector3(-2.4f, 0f, -2.2f), 90f, S_Furn, room.transform);
+                PlaceModel("Furniture/chairDesk", new Vector3(-1.0f, 0f, -2.2f), 90f, S_Furn, room.transform);
+                PlaceModel("Furniture/bookcaseOpen", new Vector3(2.5f, 0f, 2.1f), -90f, S_Furn, room.transform);
+                PlaceModel("Furniture/plantSmall3", new Vector3(-2.5f, 0f, 2.3f), 0f, S_Furn, room.transform);
+                PlaceModel("Furniture/bear", new Vector3(1.8f, 0f, -1.4f), -30f, S_Furn, room.transform);
+                break;
+            }
+            case 6:
+            {
+                var room = BuildRoom(12f, 12f, 2.9f, wall1, floor, ceil, window: true, doorway: true);
+                PlaceModel("Furniture/rugRectangle", new Vector3(0f, 0.02f, 0f), 0f, S_Furn, room.transform);
+                PlaceModel("Furniture/loungeSofa", new Vector3(0f, 0f, -4.4f), 0f, S_Furn, room.transform);
+                PlaceModel("Furniture/loungeChair", new Vector3(-3.4f, 0f, -3.2f), 45f, S_Furn, room.transform);
+                PlaceModel("Furniture/tableCoffee", new Vector3(0f, 0f, -2.8f), 0f, S_Furn, room.transform);
+                PlaceModel("Furniture/table", new Vector3(-4.0f, 0f, 2.6f), 0f, S_Furn, room.transform);
+                ChairRing(room.transform, new Vector3(-4.0f, 0f, 2.6f), 1.15f, 3);
+                PlaceModel("Furniture/tableRound", new Vector3(4.0f, 0f, 2.6f), 0f, S_Furn, room.transform);
+                ChairRing(room.transform, new Vector3(4.0f, 0f, 2.6f), 1.15f, 3);
+                PlaceModel("Furniture/bookcaseOpen", new Vector3(5.5f, 0f, -1.0f), -90f, S_Furn, room.transform);
+                PlaceModel("Furniture/bookcaseClosedWide", new Vector3(-5.6f, 0f, -1.0f), 90f, S_Furn, room.transform);
+                PlaceModel("Furniture/pottedPlant", new Vector3(5.4f, 0f, 5.0f), 0f, S_Furn, room.transform);
+                PlaceModel("Furniture/pottedPlant", new Vector3(-5.4f, 0f, 5.0f), 0f, S_Furn, room.transform);
+                PlaceModel("Furniture/bear", new Vector3(2.6f, 0f, 0.4f), 210f, S_Furn, room.transform);
+                PlaceModel("Furniture/cabinetBed", new Vector3(-5.6f, 0f, 4.4f), 90f, S_Furn, room.transform);
+                AddPointLight(room.transform, new Vector3(-4f, 2.4f, 0f), new Color(1f, 0.9f, 0.8f), 10f, 1.2f);
+                AddPointLight(room.transform, new Vector3(4f, 2.4f, 0f), new Color(0.9f, 0.95f, 1f), 10f, 1.2f);
+                break;
+            }
         }
     }
 
@@ -685,14 +868,18 @@ public static class LabBuilder
     {
         var canvasGo = new GameObject(name);
         canvasGo.transform.position = position;
-        canvasGo.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+        // Face the player (who stands near the origin and looks toward +Z):
+        // identity orientation makes the canvas front point back at the viewer.
+        canvasGo.transform.rotation = Quaternion.identity;
         var canvas = canvasGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
+        canvas.worldCamera = Camera.main;
         var rect = canvasGo.GetComponent<RectTransform>();
         rect.sizeDelta = new Vector2(width, width * 0.35f);
         canvasGo.transform.localScale = Vector3.one * 0.5f;
         canvasGo.AddComponent<CanvasScaler>();
-        canvasGo.AddComponent<GraphicRaycaster>();
+        var raycaster = canvasGo.AddComponent<GraphicRaycaster>();
+        raycaster.ignoreReversedGraphics = false;
 
         var bg = new GameObject("Background");
         bg.transform.SetParent(canvasGo.transform, false);
@@ -736,7 +923,7 @@ public static class LabBuilder
     {
         var canvasGo = new GameObject(name, typeof(RectTransform));
         canvasGo.transform.position = position;
-        canvasGo.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+        canvasGo.transform.rotation = Quaternion.identity;
 
         var canvas = canvasGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
@@ -747,7 +934,8 @@ public static class LabBuilder
         canvasGo.transform.localScale = Vector3.one * 0.0018f;
 
         canvasGo.AddComponent<CanvasScaler>();
-        canvasGo.AddComponent<TrackedDeviceGraphicRaycaster>();
+        var ray = canvasGo.AddComponent<TrackedDeviceGraphicRaycaster>();
+        ray.ignoreReversedGraphics = false;
         return canvasGo;
     }
 
@@ -925,26 +1113,44 @@ public static class LabBuilder
         return s_Font;
     }
 
+    // Generates a short tone and writes it to a real 16-bit PCM WAV file so the
+    // clip survives serialisation (a runtime AudioClip.Create asset does not).
     static AudioClip CreateToneClip(string name, float frequency, float duration)
     {
         const int sampleRate = 44100;
         var samples = Mathf.CeilToInt(sampleRate * duration);
-        var data = new float[samples];
-        for (var i = 0; i < samples; i++)
-        {
-            var t = (float)i / sampleRate;
-            var envelope = Mathf.Clamp01(1f - t / duration);
-            data[i] = Mathf.Sin(2f * Mathf.PI * frequency * t) * 0.4f * envelope;
-        }
-
-        var clip = AudioClip.Create(name, samples, 1, sampleRate, false);
-        clip.SetData(data, 0);
 
         Directory.CreateDirectory(LabsRoot + "/Audio");
-        var path = LabsRoot + "/Audio/" + name + ".asset";
-        AssetDatabase.DeleteAsset(path);
-        AssetDatabase.CreateAsset(clip, path);
-        AssetDatabase.SaveAssets();
+        var path = LabsRoot + "/Audio/" + name + ".wav";
+
+        using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write))
+        using (var w = new BinaryWriter(stream))
+        {
+            var dataSize = samples * 2; // 16-bit mono
+            w.Write(Encoding.ASCII.GetBytes("RIFF"));
+            w.Write(36 + dataSize);
+            w.Write(Encoding.ASCII.GetBytes("WAVE"));
+            w.Write(Encoding.ASCII.GetBytes("fmt "));
+            w.Write(16);
+            w.Write((short)1);            // PCM
+            w.Write((short)1);            // channels
+            w.Write(sampleRate);
+            w.Write(sampleRate * 2);      // byte rate
+            w.Write((short)2);            // block align
+            w.Write((short)16);           // bits per sample
+            w.Write(Encoding.ASCII.GetBytes("data"));
+            w.Write(dataSize);
+
+            for (var i = 0; i < samples; i++)
+            {
+                var t = (float)i / sampleRate;
+                var envelope = Mathf.Clamp01(1f - t / duration);
+                var v = Mathf.Sin(2f * Mathf.PI * frequency * t) * 0.4f * envelope;
+                w.Write((short)(Mathf.Clamp(v, -1f, 1f) * 32767f));
+            }
+        }
+
+        AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
         return AssetDatabase.LoadAssetAtPath<AudioClip>(path);
     }
 

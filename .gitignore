@@ -9,6 +9,10 @@
 /[Mm]emoryCaptures/
 /[Rr]ecordings/
 
+# Generated scene screenshots (regenerate via Tools/Capture Scene Screenshots)
+/[Aa]ssets/[Ss]creenshots/
+/[Aa]ssets/[Ss]creenshots.meta
+
 # Asset meta data (kept) / crash reports
 sysinfo.txt
 *.stackdump
